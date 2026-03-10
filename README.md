@@ -1,4 +1,4 @@
-# CMPE 255-01 — Data Mining Project  
+# CMPE 255-01: Data Mining Project  
 ## Group 7
 
 ### Team Members (Alphabetical Order)
