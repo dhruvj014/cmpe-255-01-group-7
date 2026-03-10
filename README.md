@@ -1,7 +1,7 @@
 # CMPE 255-01: Data Mining Project  
 ## Group 7
 
-### Team Members (Alphabetical Order)
+### Team Members
 - **Dhruv Sachin Jain** (SJSU ID: 019150859)  
 - **Disha Jadav** (SJSU ID: 018484362)  
 - **Himanshu Jain** (SJSU ID: 019098794)  
