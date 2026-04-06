@@ -2,7 +2,9 @@
 
 Handles loading of all raw data files with robust parsing for edge cases.
 """
+import csv
 import os
+import tempfile
 from typing import Tuple
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import (
@@ -124,7 +126,19 @@ def load_review_content_robust(spark: SparkSession, data_path: str) -> DataFrame
 
     print(f"  Parsed {len(rows):,} rows successfully, {error_count} errors")
 
-    content_df = spark.createDataFrame(rows, schema=REVIEW_CONTENT_SCHEMA)
+    # Write to a temp CSV so Spark reads natively (JVM-side) instead of going
+    # through py4j row-by-row, which crashes Python 3.12 workers during shuffles.
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".csv", delete=False, encoding="utf-8", newline=""
+    )
+    writer = csv.writer(tmp)
+    writer.writerow(["user_id", "prod_id", "date", "review_text"])
+    writer.writerows(rows)
+    tmp.close()
+
+    content_df = (
+        spark.read.csv(tmp.name, header=True, schema=REVIEW_CONTENT_SCHEMA)
+    )
     return content_df
 
 
