@@ -9,6 +9,7 @@ extras/
 L1_ETL_OLAP/output_csv/
 L1_ETL_OLAP/delta_lake/
 L2_FPGrowth/outputs/
+L4_Clustering/outputs/
 
 # ---------------------------------------------------------------------------
 # Python
