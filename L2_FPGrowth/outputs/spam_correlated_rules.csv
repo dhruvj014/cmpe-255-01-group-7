@@ -1,0 +1,25 @@
+antecedents,consequents,support,confidence,lift,antecedent_spam_rate
+"frozenset({'tenure=new', 'review_count=Low'})","frozenset({'burst=Normal', 'seller_conc=High'})",0.7301989803171237,1.0,1.2378934451959023,0.29101728982289243
+"frozenset({'tenure=new', 'seller_conc=High'})","frozenset({'burst=Normal', 'review_count=Low'})",0.7301989803171237,1.0,1.2378934451959023,0.29101728982289243
+"frozenset({'tenure=new', 'burst=Normal', 'review_count=Low'})",frozenset({'seller_conc=High'}),0.7301989803171237,1.0,1.2378934451959023,0.29101728982289243
+"frozenset({'tenure=new', 'burst=Normal', 'seller_conc=High'})",frozenset({'review_count=Low'}),0.7301989803171237,1.0,1.2378934451959023,0.29101728982289243
+"frozenset({'tenure=new', 'review_count=Low'})",frozenset({'seller_conc=High'}),0.7301989803171237,1.0,1.2378934451959023,0.29101728982289243
+"frozenset({'tenure=new', 'seller_conc=High'})",frozenset({'review_count=Low'}),0.7301989803171237,1.0,1.2378934451959023,0.29101728982289243
+"frozenset({'tenure=new', 'burst=Normal'})",frozenset({'review_count=Low'}),0.7301989803171237,0.9919984132535089,1.2279883334112545,0.29021088765591263
+"frozenset({'tenure=new', 'burst=Normal'})","frozenset({'review_count=Low', 'seller_conc=High'})",0.7301989803171237,0.9919984132535089,1.2279883334112545,0.29021088765591263
+"frozenset({'tenure=new', 'burst=Normal'})",frozenset({'seller_conc=High'}),0.7301989803171237,0.9919984132535089,1.2279883334112545,0.29021088765591263
+frozenset({'seller_conc=High'}),"frozenset({'tenure=new', 'review_count=Low'})",0.7301989803171237,0.9039085314232991,1.2378934451959023,0.2718445909311417
+frozenset({'seller_conc=High'}),frozenset({'review_count=Low'}),0.8078239721527449,1.0,1.2378934451959023,0.2718445909311417
+frozenset({'review_count=Low'}),frozenset({'seller_conc=High'}),0.8078239721527449,1.0,1.2378934451959023,0.2718445909311417
+"frozenset({'burst=Normal', 'review_count=Low'})",frozenset({'seller_conc=High'}),0.8078239721527449,1.0,1.2378934451959023,0.2718445909311417
+"frozenset({'burst=Normal', 'seller_conc=High'})",frozenset({'review_count=Low'}),0.8078239721527449,1.0,1.2378934451959023,0.2718445909311417
+frozenset({'review_count=Low'}),"frozenset({'burst=Normal', 'seller_conc=High'})",0.8078239721527449,1.0,1.2378934451959023,0.2718445909311417
+frozenset({'seller_conc=High'}),"frozenset({'burst=Normal', 'review_count=Low'})",0.8078239721527449,1.0,1.2378934451959023,0.2718445909311417
+frozenset({'review_count=Low'}),"frozenset({'tenure=new', 'seller_conc=High'})",0.7301989803171237,0.9039085314232991,1.2378934451959023,0.2718445909311417
+frozenset({'seller_conc=High'}),"frozenset({'tenure=new', 'burst=Normal', 'review_count=Low'})",0.7301989803171237,0.9039085314232991,1.2378934451959023,0.2718445909311417
+"frozenset({'burst=Normal', 'seller_conc=High'})","frozenset({'tenure=new', 'review_count=Low'})",0.7301989803171237,0.9039085314232991,1.2378934451959023,0.2718445909311417
+"frozenset({'burst=Normal', 'review_count=Low'})","frozenset({'tenure=new', 'seller_conc=High'})",0.7301989803171237,0.9039085314232991,1.2378934451959023,0.2718445909311417
+frozenset({'review_count=Low'}),"frozenset({'tenure=new', 'burst=Normal', 'seller_conc=High'})",0.7301989803171237,0.9039085314232991,1.2378934451959023,0.2718445909311417
+frozenset({'review_count=Low'}),"frozenset({'tenure=new', 'burst=Normal'})",0.7301989803171237,0.9039085314232991,1.2279883334112545,0.2718445909311417
+"frozenset({'review_count=Low', 'seller_conc=High'})","frozenset({'tenure=new', 'burst=Normal'})",0.7301989803171237,0.9039085314232991,1.2279883334112545,0.2718445909311417
+frozenset({'seller_conc=High'}),"frozenset({'tenure=new', 'burst=Normal'})",0.7301989803171237,0.9039085314232991,1.2279883334112545,0.2718445909311417
