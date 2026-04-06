@@ -1,0 +1,9 @@
+{
+  "base_feature_source": "reviewer_features.csv",
+  "rows": 260277,
+  "columns": 25,
+  "positive_rate": 0.23127283624753628,
+  "l2_rules_used": 24,
+  "has_kmeans": true,
+  "has_dbscan": true
+}
