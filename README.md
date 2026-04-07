@@ -65,3 +65,34 @@ python L4_Clustering/03_dbscan_clustering.py
 python L4_Clustering/04_cluster_analysis.py
 ```
 Or open `04_clustering.ipynb`
+
+---
+
+## Layer 5: Classification + Anomaly Detection (Disha)
+
+Layer 5 fuses behavioral features from L1 with pattern signals from L2 and cluster/noise signals from L4, then trains final spam-detection models.
+
+**Primary input sources:**
+- `reviewer_features.csv` or `L1_ETL_OLAP/output_csv/reviewer_profiles.csv`
+- `L2_FPGrowth/outputs/spam_correlated_rules.csv`
+- `L4_Clustering/outputs/reviewer_clusters.csv`
+- `L4_Clustering/outputs/dbscan_results.csv`
+
+**Outputs:**
+- `L5_Classification/outputs/l5_feature_table.csv` — fused L1+L2+L4 training table
+- `L5_Classification/outputs/supervised_model_metrics.csv` — Decision Tree / Random Forest / SVM metrics
+- `L5_Classification/outputs/anomaly_model_metrics.csv` — Isolation Forest / LOF metrics
+- `L5_Classification/outputs/supervised_best_model.joblib` — best supervised model artifact
+- `L5_Classification/plots/*.png` — ROC, PR, feature-importance, anomaly ROC visualizations
+
+**How to run:**
+```bash
+python L5_Classification/main.py
+```
+
+Or stepwise:
+```bash
+python L5_Classification/01_build_feature_table.py
+python L5_Classification/02_train_models.py
+python L5_Classification/03_anomaly_detection.py
+```
