@@ -229,10 +229,15 @@ def main() -> None:
     base = _normalize_base_columns(base)
 
     base = base.copy()
-    # Label: any reviewer with at least one spam-flagged review is positive.
-    # Previously used > 0.5, but 65% of reviewers have exactly 1 review,
-    # making > 0.5 equivalent to "all reviews are spam" — too restrictive.
-    base["spam_label"] = (base["spam_rate"].astype(float) > 0).astype(int)
+    # Label: strong spam reviewer.
+    # Positive only when reviewer has at least 2 spam reviews and
+    # at least half of all reviews are spam.
+    # This keeps the label semantically strong while avoiding noisy
+    # one-off positives from sparse reviewer histories.
+    base["spam_label"] = (
+        ((base["spam_rate"].astype(float) * base["review_count"].astype(float)) >= 2) &
+        (base["spam_rate"].astype(float) >= 0.5)
+    ).astype(int)
 
     l2_rules = _load_l2_rules()
     l2_features = _compute_l2_features(base, l2_rules)
