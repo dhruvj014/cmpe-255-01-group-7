@@ -24,9 +24,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 L5_OUTPUT_DIR = PROJECT_ROOT / "L5_Classification" / "outputs"
 
 BASE_FEATURE_CANDIDATES = [
-    PROJECT_ROOT / "reviewer_features.csv",
     PROJECT_ROOT / "L1_ETL_OLAP" / "output_csv" / "reviewer_profiles.csv",
     PROJECT_ROOT / "reviewer_profiles.csv",
+    PROJECT_ROOT / "reviewer_features.csv",
 ]
 
 L2_RULES_PATH = PROJECT_ROOT / "L2_FPGrowth" / "outputs" / "spam_correlated_rules.csv"
@@ -54,9 +54,10 @@ def _normalize_base_columns(df: pd.DataFrame) -> pd.DataFrame:
         "mean_exclamations": "avg_exclamations",
         "concentration": "max_seller_fraction",
     }
-    for old_col, new_col in rename_map.items():
-        if old_col in df.columns and new_col not in df.columns:
-            df[new_col] = df[old_col]
+    # Rename (not copy) so we don't end up with duplicate feature pairs.
+    applicable = {old: new for old, new in rename_map.items()
+                  if old in df.columns and new not in df.columns}
+    df = df.rename(columns=applicable)
 
     if "user_id" not in df.columns:
         raise KeyError("Base feature table must include user_id")
@@ -213,21 +214,9 @@ def _load_l4_features(base_user_ids: pd.Series) -> pd.DataFrame:
         out = out.merge(db, on="user_id", how="left")
         out["dbscan_is_noise"] = (out["dbscan_cluster"] == -1).astype(int)
 
-    if L4_KMEANS_SUMMARY_PATH.exists() and "kmeans_cluster_id" in out.columns:
-        km_sum = pd.read_csv(L4_KMEANS_SUMMARY_PATH)
-        if {"cluster_id", "spam_rate_mean"}.issubset(km_sum.columns):
-            km_map = km_sum[["cluster_id", "spam_rate_mean"]].rename(
-                columns={"cluster_id": "kmeans_cluster_id", "spam_rate_mean": "kmeans_cluster_spam_rate"}
-            )
-            out = out.merge(km_map, on="kmeans_cluster_id", how="left")
-
-    if L4_DBSCAN_SUMMARY_PATH.exists() and "dbscan_cluster" in out.columns:
-        db_sum = pd.read_csv(L4_DBSCAN_SUMMARY_PATH)
-        if {"dbscan_cluster", "spam_rate_mean"}.issubset(db_sum.columns):
-            db_map = db_sum[["dbscan_cluster", "spam_rate_mean"]].rename(
-                columns={"spam_rate_mean": "dbscan_cluster_spam_rate"}
-            )
-            out = out.merge(db_map, on="dbscan_cluster", how="left")
+    # NOTE: cluster-level spam_rate_mean was previously joined here, but that
+    # leaks the target variable (spam_rate) into the feature set.  Cluster IDs
+    # and the noise flag already capture the structural signal without leakage.
 
     return out
 
@@ -240,7 +229,10 @@ def main() -> None:
     base = _normalize_base_columns(base)
 
     base = base.copy()
-    base["spam_label"] = (base["spam_rate"].astype(float) > 0.5).astype(int)
+    # Label: any reviewer with at least one spam-flagged review is positive.
+    # Previously used > 0.5, but 65% of reviewers have exactly 1 review,
+    # making > 0.5 equivalent to "all reviews are spam" — too restrictive.
+    base["spam_label"] = (base["spam_rate"].astype(float) > 0).astype(int)
 
     l2_rules = _load_l2_rules()
     l2_features = _compute_l2_features(base, l2_rules)
@@ -254,8 +246,6 @@ def main() -> None:
         "kmeans_cluster_id",
         "dbscan_cluster",
         "dbscan_is_noise",
-        "kmeans_cluster_spam_rate",
-        "dbscan_cluster_spam_rate",
     ]:
         if col in final_df.columns:
             if col == "dbscan_is_noise":

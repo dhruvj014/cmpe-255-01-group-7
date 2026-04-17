@@ -3,7 +3,10 @@
 Models:
     - Decision Tree
     - Random Forest
-    - SVM (linear)
+    - MLP (multi-layer perceptron)
+
+Sample weighting: each reviewer is weighted by review_count so that
+high-activity accounts (more signal) contribute more to the loss.
 
 Outputs:
     - outputs/supervised_model_metrics.csv
@@ -22,7 +25,6 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     average_precision_score,
@@ -32,9 +34,9 @@ from sklearn.metrics import (
     roc_curve,
 )
 from sklearn.model_selection import StratifiedGroupKFold, train_test_split
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import LinearSVC
 from sklearn.tree import DecisionTreeClassifier
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -93,8 +95,11 @@ def _prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.nd
         "is_spam_reviewer",
         "label",
     }
+    # Non-numeric columns that should not be used as features.
+    drop_cols = {"first_review_date", "last_review_date"}
 
-    X = df[[c for c in df.columns if c not in leakage_cols]].copy()
+    exclude = leakage_cols | drop_cols
+    X = df[[c for c in df.columns if c not in exclude]].copy()
     y = df["spam_label"].astype(int).to_numpy()
     groups = df["user_id"].to_numpy()
 
@@ -109,6 +114,8 @@ def _prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.nd
 
     X = X.apply(pd.to_numeric, errors="coerce")
     X = X.fillna(X.median(numeric_only=True))
+    # Safety: if a column is entirely NaN (no valid median), fill with 0.
+    X = X.fillna(0)
 
     return X, y, groups
 
@@ -131,10 +138,17 @@ def main() -> None:
     df = pd.read_csv(INPUT_PATH)
     X, y, groups = _prepare_features(df)
 
+    # Sample weights: reviewers with more reviews carry more signal.
+    if "review_count" in df.columns:
+        sample_weights = df["review_count"].to_numpy().astype(float)
+    else:
+        sample_weights = np.ones(len(df))
+
     train_idx, test_idx = get_group_stratified_split(X, y, groups, test_size=0.20, random_state=RANDOM_STATE)
     X_train, X_test = X.iloc[train_idx].copy(), X.iloc[test_idx].copy()
     y_train, y_test = y[train_idx], y[test_idx]
     g_test = groups[test_idx]
+    w_train = sample_weights[train_idx]
 
     print(f"Training rows: {len(X_train):,}")
     print(f"Test rows: {len(X_test):,}")
@@ -169,20 +183,27 @@ def main() -> None:
                 )
             ]
         ),
-        "SVM": Pipeline(
+        "MLP": Pipeline(
             steps=[
                 ("scaler", StandardScaler()),
                 (
                     "clf",
-                    CalibratedClassifierCV(
-                        estimator=LinearSVC(class_weight="balanced", random_state=RANDOM_STATE, max_iter=5000),
-                        method="sigmoid",
-                        cv=3,
+                    MLPClassifier(
+                        hidden_layer_sizes=(128, 64),
+                        activation="relu",
+                        max_iter=300,
+                        early_stopping=True,
+                        validation_fraction=0.1,
+                        random_state=RANDOM_STATE,
                     ),
                 ),
             ]
         ),
     }
+
+    # Models whose underlying estimator accepts sample_weight.
+    # MLP does not support sample_weight natively.
+    SUPPORTS_WEIGHT = {"Decision Tree", "Random Forest"}
 
     metrics_rows = []
     roc_payload = []
@@ -195,7 +216,10 @@ def main() -> None:
 
     for name, model in models.items():
         print(f"\nTraining {name}...")
-        model.fit(X_train, y_train)
+        if name in SUPPORTS_WEIGHT:
+            model.fit(X_train, y_train, clf__sample_weight=w_train)
+        else:
+            model.fit(X_train, y_train)
 
         scores = _score_vector(model, X_test)
         y_pred = model.predict(X_test)

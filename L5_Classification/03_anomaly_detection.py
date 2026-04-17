@@ -74,7 +74,11 @@ def _prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.nd
         "is_spam_reviewer",
         "label",
     }
-    X = df[[c for c in df.columns if c not in leakage_cols]].copy()
+    # Non-numeric columns that should not be used as features.
+    drop_cols = {"first_review_date", "last_review_date"}
+
+    exclude = leakage_cols | drop_cols
+    X = df[[c for c in df.columns if c not in exclude]].copy()
     y = df["spam_label"].astype(int).to_numpy()
     groups = df["user_id"].to_numpy()
 
@@ -88,6 +92,8 @@ def _prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.nd
 
     X = X.apply(pd.to_numeric, errors="coerce")
     X = X.fillna(X.median(numeric_only=True))
+    # Safety: if a column is entirely NaN (no valid median), fill with 0.
+    X = X.fillna(0)
 
     return X, y, groups
 
