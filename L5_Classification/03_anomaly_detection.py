@@ -1,8 +1,12 @@
-"""Train Layer-5 anomaly detectors on the fused feature table.
+"""Train Layer-5 anomaly detectors on the review-level feature table.
 
 Algorithms:
     - Isolation Forest
     - Local Outlier Factor (novelty mode)
+
+Trained on legitimate reviews only (is_spam=0) from the training split.
+With per-review features (review_length, rating, temporal), spam reviews
+should be more distinguishable than reviewer-level aggregates.
 
 Outputs:
     - outputs/anomaly_model_metrics.csv
@@ -65,37 +69,50 @@ def get_group_stratified_split(
 
 
 def _prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    """Prepare review-level features. Label = is_spam, groups = user_id."""
     leakage_cols = {
         "user_id",
+        "prod_id",
+        "is_spam",
         "spam_label",
         "spam_rate",
         "spam_count",
-        "is_spam",
         "is_spam_reviewer",
         "label",
     }
-    # Non-numeric columns that should not be used as features.
-    drop_cols = {"first_review_date", "last_review_date"}
+    drop_cols = {"first_review_date", "last_review_date", "review_date", "date", "year_month"}
 
     exclude = leakage_cols | drop_cols
     X = df[[c for c in df.columns if c not in exclude]].copy()
-    y = df["spam_label"].astype(int).to_numpy()
+    y = df["is_spam"].astype(int).to_numpy()
     groups = df["user_id"].to_numpy()
 
     for col in X.columns:
         if X[col].dtype == "bool":
             X[col] = X[col].astype(int)
 
+    # One-hot encode kmeans_cluster_id only (no dbscan_cluster column)
+    cluster_cols = [c for c in ("kmeans_cluster_id",) if c in X.columns]
+    if cluster_cols:
+        for c in cluster_cols:
+            X[c] = X[c].astype(int).astype(str)
+        X = pd.get_dummies(X, columns=cluster_cols, drop_first=False)
+
     cat_cols = [c for c in X.columns if X[c].dtype == "object"]
     if cat_cols:
         X = pd.get_dummies(X, columns=cat_cols, drop_first=False)
 
     X = X.apply(pd.to_numeric, errors="coerce")
-    X = X.fillna(X.median(numeric_only=True))
-    # Safety: if a column is entirely NaN (no valid median), fill with 0.
-    X = X.fillna(0)
 
     return X, y, groups
+
+
+def _impute_split(X_train: pd.DataFrame, X_test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fill NaNs using training-set median only (no test-set leakage)."""
+    train_median = X_train.median(numeric_only=True)
+    X_train = X_train.fillna(train_median).fillna(0)
+    X_test = X_test.fillna(train_median).fillna(0)
+    return X_train, X_test
 
 
 def _evaluate(y_true: np.ndarray, scores: np.ndarray, pred_binary: np.ndarray, name: str) -> dict:
@@ -119,6 +136,7 @@ def main() -> None:
 
     train_idx, test_idx = get_group_stratified_split(X, y, groups, test_size=0.20, random_state=RANDOM_STATE)
     X_train, X_test = X.iloc[train_idx].copy(), X.iloc[test_idx].copy()
+    X_train, X_test = _impute_split(X_train, X_test)
     y_train, y_test = y[train_idx], y[test_idx]
     g_test = groups[test_idx]
 
@@ -126,11 +144,14 @@ def main() -> None:
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
+    # Train on legitimate reviews only (is_spam=0)
     legit_mask = y_train == 0
     X_train_legit = X_train_scaled[legit_mask]
 
     contamination = float(np.clip(np.round(y_train.mean(), 3), 0.01, 0.40))
     print(f"Contamination set to {contamination:.3f}")
+    print(f"Training rows (legit only): {X_train_legit.shape[0]:,}")
+    print(f"Test rows: {len(X_test):,}")
 
     iso = IsolationForest(
         n_estimators=300,
@@ -186,14 +207,16 @@ def main() -> None:
     ax.plot([0, 1], [0, 1], "k--", linewidth=1, label="Random")
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
-    ax.set_title("L5 Anomaly Models - ROC")
+    ax.set_title("L5 Anomaly Models - ROC (Review-Level)")
     ax.grid(alpha=0.3)
     ax.legend()
     fig.tight_layout()
     fig.savefig(PLOT_DIR / "l5_anomaly_roc.png", dpi=150)
     plt.close(fig)
 
-    print("Saved anomaly outputs to L5_Classification/outputs and L5_Classification/plots")
+    print("\nMetrics:")
+    print(metrics.to_string(index=False))
+    print("\nSaved anomaly outputs to L5_Classification/outputs and L5_Classification/plots")
 
 
 if __name__ == "__main__":

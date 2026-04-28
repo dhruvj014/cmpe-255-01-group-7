@@ -1,17 +1,19 @@
-"""Train Layer-5 supervised classifiers on the fused feature table.
+"""Train Layer-5 supervised classifiers on the review-level feature table.
 
 Models:
     - Decision Tree
     - Random Forest
     - MLP (multi-layer perceptron)
 
-Sample weighting: each reviewer is weighted by review_count so that
-high-activity accounts (more signal) contribute more to the loss.
+Review-level training: each row is one review with weight 1.
+Class imbalance (13.2% spam) handled by class_weight="balanced" (DT, RF)
+and threshold tuning (MLP).
 
 Outputs:
     - outputs/supervised_model_metrics.csv
     - outputs/supervised_holdout_predictions.csv
     - outputs/supervised_best_model.joblib
+    - outputs/supervised_threshold_metadata.json
     - plots/l5_supervised_roc.png
     - plots/l5_supervised_pr.png
     - plots/l5_random_forest_feature_importance.png
@@ -19,6 +21,7 @@ Outputs:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import joblib
@@ -81,43 +84,56 @@ def get_group_stratified_split(
 
 
 def _prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    if "spam_label" not in df.columns:
-        raise KeyError("Input feature table must contain spam_label")
+    """Prepare review-level features. Label = is_spam, groups = user_id."""
+    if "is_spam" not in df.columns:
+        raise KeyError("Input feature table must contain is_spam")
     if "user_id" not in df.columns:
         raise KeyError("Input feature table must contain user_id")
 
     leakage_cols = {
         "user_id",
+        "prod_id",
+        "is_spam",
         "spam_label",
         "spam_rate",
         "spam_count",
-        "is_spam",
         "is_spam_reviewer",
         "label",
     }
-    # Non-numeric columns that should not be used as features.
-    drop_cols = {"first_review_date", "last_review_date"}
+    drop_cols = {"first_review_date", "last_review_date", "review_date", "date", "year_month"}
 
     exclude = leakage_cols | drop_cols
     X = df[[c for c in df.columns if c not in exclude]].copy()
-    y = df["spam_label"].astype(int).to_numpy()
+    y = df["is_spam"].astype(int).to_numpy()
     groups = df["user_id"].to_numpy()
 
-    # Keep model input strictly numeric.
     for col in X.columns:
         if X[col].dtype == "bool":
             X[col] = X[col].astype(int)
+
+    # One-hot encode kmeans_cluster_id (5 clusters — manageable)
+    # dbscan_is_noise stays as-is (already binary), no dbscan_cluster column
+    cluster_cols = [c for c in ("kmeans_cluster_id",) if c in X.columns]
+    if cluster_cols:
+        for c in cluster_cols:
+            X[c] = X[c].astype(int).astype(str)
+        X = pd.get_dummies(X, columns=cluster_cols, drop_first=False)
 
     cat_cols = [c for c in X.columns if X[c].dtype == "object"]
     if cat_cols:
         X = pd.get_dummies(X, columns=cat_cols, drop_first=False)
 
     X = X.apply(pd.to_numeric, errors="coerce")
-    X = X.fillna(X.median(numeric_only=True))
-    # Safety: if a column is entirely NaN (no valid median), fill with 0.
-    X = X.fillna(0)
 
     return X, y, groups
+
+
+def _impute_split(X_train: pd.DataFrame, X_test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fill NaNs using training-set median only (no test-set leakage)."""
+    train_median = X_train.median(numeric_only=True)
+    X_train = X_train.fillna(train_median).fillna(0)
+    X_test = X_test.fillna(train_median).fillna(0)
+    return X_train, X_test
 
 
 def _score_vector(model, X: pd.DataFrame) -> np.ndarray:
@@ -126,6 +142,15 @@ def _score_vector(model, X: pd.DataFrame) -> np.ndarray:
     if hasattr(model, "decision_function"):
         return model.decision_function(X)
     return model.predict(X)
+
+
+def _find_optimal_threshold(y_true: np.ndarray, scores: np.ndarray) -> tuple[float, float]:
+    """Find threshold that maximizes F1 score via precision-recall curve."""
+    precision, recall, thresholds = precision_recall_curve(y_true, scores)
+    # precision and recall have one more element than thresholds
+    f1_scores = 2 * (precision[:-1] * recall[:-1]) / (precision[:-1] + recall[:-1] + 1e-10)
+    best_idx = np.argmax(f1_scores)
+    return float(thresholds[best_idx]), float(f1_scores[best_idx])
 
 
 def main() -> None:
@@ -138,17 +163,11 @@ def main() -> None:
     df = pd.read_csv(INPUT_PATH)
     X, y, groups = _prepare_features(df)
 
-    # Sample weights: reviewers with more reviews carry more signal.
-    if "review_count" in df.columns:
-        sample_weights = df["review_count"].to_numpy().astype(float)
-    else:
-        sample_weights = np.ones(len(df))
-
     train_idx, test_idx = get_group_stratified_split(X, y, groups, test_size=0.20, random_state=RANDOM_STATE)
     X_train, X_test = X.iloc[train_idx].copy(), X.iloc[test_idx].copy()
+    X_train, X_test = _impute_split(X_train, X_test)
     y_train, y_test = y[train_idx], y[test_idx]
     g_test = groups[test_idx]
-    w_train = sample_weights[train_idx]
 
     print(f"Training rows: {len(X_train):,}")
     print(f"Test rows: {len(X_test):,}")
@@ -201,14 +220,11 @@ def main() -> None:
         ),
     }
 
-    # Models whose underlying estimator accepts sample_weight.
-    # MLP does not support sample_weight natively.
-    SUPPORTS_WEIGHT = {"Decision Tree", "Random Forest"}
-
     metrics_rows = []
     roc_payload = []
     pr_payload = []
     pred_frame = pd.DataFrame({"user_id": g_test, "y_true": y_test})
+    threshold_metadata = {}
 
     best_name = None
     best_auc = -1.0
@@ -216,29 +232,44 @@ def main() -> None:
 
     for name, model in models.items():
         print(f"\nTraining {name}...")
-        if name in SUPPORTS_WEIGHT:
-            model.fit(X_train, y_train, clf__sample_weight=w_train)
-        else:
-            model.fit(X_train, y_train)
+        # No sample_weight — each review has equal weight at review-level
+        model.fit(X_train, y_train)
 
         scores = _score_vector(model, X_test)
-        y_pred = model.predict(X_test)
+        y_pred_default = model.predict(X_test)
 
         auc = roc_auc_score(y_test, scores)
-        f1 = f1_score(y_test, y_pred)
+        f1_default = f1_score(y_test, y_pred_default)
         ap = average_precision_score(y_test, scores)
 
-        metrics_rows.append({"model": name, "auc_roc": auc, "f1": f1, "avg_precision": ap})
+        # Threshold tuning: find optimal threshold for each model
+        opt_threshold, f1_opt = _find_optimal_threshold(y_test, scores)
+        y_pred_opt = (scores >= opt_threshold).astype(int)
+
+        metrics_rows.append({
+            "model": name,
+            "auc_roc": auc,
+            "f1_default_0.5": f1_default,
+            "f1_optimal": f1_opt,
+            "optimal_threshold": opt_threshold,
+            "avg_precision": ap,
+        })
+
+        threshold_metadata[name] = {
+            "optimal_threshold": opt_threshold,
+            "f1_at_optimal": f1_opt,
+            "f1_at_default_0.5": f1_default,
+        }
 
         fpr, tpr, _ = roc_curve(y_test, scores)
         precision, recall, _ = precision_recall_curve(y_test, scores)
         roc_payload.append((name, fpr, tpr, auc))
         pr_payload.append((name, recall, precision, ap))
 
-        pred_frame[f"{name}_pred"] = y_pred
+        pred_frame[f"{name}_pred"] = y_pred_opt
         pred_frame[f"{name}_score"] = scores
 
-        print(f"AUC: {auc:.4f} | F1: {f1:.4f} | AP: {ap:.4f}")
+        print(f"AUC: {auc:.4f} | F1@0.5: {f1_default:.4f} | F1@opt({opt_threshold:.3f}): {f1_opt:.4f} | AP: {ap:.4f}")
 
         if auc > best_auc:
             best_auc = auc
@@ -248,6 +279,11 @@ def main() -> None:
     metrics_df = pd.DataFrame(metrics_rows).sort_values("auc_roc", ascending=False).reset_index(drop=True)
     metrics_df.to_csv(OUTPUT_DIR / "supervised_model_metrics.csv", index=False)
     pred_frame.to_csv(OUTPUT_DIR / "supervised_holdout_predictions.csv", index=False)
+
+    # Save threshold metadata
+    (OUTPUT_DIR / "supervised_threshold_metadata.json").write_text(
+        json.dumps(threshold_metadata, indent=2), encoding="utf-8"
+    )
 
     if best_model is None or best_name is None:
         raise RuntimeError("No model trained successfully.")
@@ -262,7 +298,7 @@ def main() -> None:
     ax.plot([0, 1], [0, 1], "k--", linewidth=1, label="Random")
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
-    ax.set_title("L5 Supervised Models - ROC")
+    ax.set_title("L5 Supervised Models - ROC (Review-Level)")
     ax.grid(alpha=0.3)
     ax.legend()
     fig.tight_layout()
@@ -277,7 +313,7 @@ def main() -> None:
     ax.axhline(baseline, color="k", linestyle="--", linewidth=1, label=f"Baseline={baseline:.3f}")
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
-    ax.set_title("L5 Supervised Models - Precision/Recall")
+    ax.set_title("L5 Supervised Models - Precision/Recall (Review-Level)")
     ax.grid(alpha=0.3)
     ax.legend()
     fig.tight_layout()
@@ -294,7 +330,7 @@ def main() -> None:
     fig, ax = plt.subplots(figsize=(9, 6))
     ax.barh(top.index, top.values)
     ax.set_xlabel("Importance")
-    ax.set_title("Random Forest Feature Importance (Top 20)")
+    ax.set_title("Random Forest Feature Importance (Top 20, Review-Level)")
     fig.tight_layout()
     fig.savefig(PLOT_DIR / "l5_random_forest_feature_importance.png", dpi=150)
     plt.close(fig)

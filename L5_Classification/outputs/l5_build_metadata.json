@@ -1,8 +1,9 @@
 {
-  "base_feature_source": "reviewer_features.csv",
-  "rows": 260277,
-  "columns": 17,
-  "positive_rate": 0.03668015229928115,
+  "base_source": "L1_ETL_OLAP/output_csv/reviews_enriched.csv",
+  "profile_source": "L1_ETL_OLAP/output_csv/reviewer_profiles.csv",
+  "rows": 531131,
+  "columns": 30,
+  "positive_rate": 0.13537714801056613,
   "l2_rules_used": 24,
   "has_kmeans": true,
   "has_dbscan": true

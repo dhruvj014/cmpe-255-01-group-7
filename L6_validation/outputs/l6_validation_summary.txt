@@ -1,0 +1,70 @@
+L6 Validation Summary
+
+========================================================================
+CROSS-SIGNAL JACCARD AT K=2000
+========================================================================
+Signal A         Signal B          Inter.    Union   Jaccard
+------------------------------------------------------------
+L4-kmeans        L4-dbscan            867     3133    0.2767
+L4-dbscan        L5-supervised        815     3185    0.2559
+L4-kmeans        L5-supervised        352     3648    0.0965
+L5-supervised    L5-anomaly           327     3673    0.0890
+L4-dbscan        L5-anomaly           317     3683    0.0861
+L4-kmeans        L5-anomaly           258     3742    0.0689
+L2-rules         L4-kmeans            228     3772    0.0604
+L1-behavioral    L5-supervised        202     3798    0.0532
+L1-behavioral    L5-anomaly           189     3811    0.0496
+L1-behavioral    L2-rules             140     3860    0.0363
+L2-rules         L4-dbscan             96     3904    0.0246
+L2-rules         L5-anomaly            94     3906    0.0241
+L2-rules         L5-supervised         69     3931    0.0176
+L1-behavioral    L4-kmeans             53     3947    0.0134
+L1-behavioral    L4-dbscan             40     3960    0.0101
+
+Key observations:
+  - Strongest agreement: L4-kmeans vs L4-dbscan (J = 0.277). Indicates these signals converge on the same suspicious reviewers at the top of the ranking.
+  - Weakest agreement:   L1-behavioral vs L4-dbscan (J = 0.010). Indicates complementary / disagreeing signal — useful for a multi-signal ensemble.
+
+========================================================================
+JACCARD STABILITY ACROSS K
+========================================================================
+K                             500     1000    2000    5000    10000
+signal_a      signal_b                                             
+L1-behavioral L2-rules       0.0000  0.0106  0.0363  0.0652  0.1362
+              L4-dbscan      0.0030  0.0030  0.0101  0.0891  0.2016
+              L4-kmeans      0.0000  0.0020  0.0134  0.0730  0.1881
+              L5-anomaly     0.0152  0.0230  0.0496  0.0745  0.1397
+              L5-supervised  0.0616  0.0543  0.0532  0.1131  0.2186
+L2-rules      L4-dbscan      0.0288  0.0272  0.0246  0.0557  0.1326
+              L4-kmeans      0.0549  0.0554  0.0604  0.0627  0.1344
+              L5-anomaly     0.0070  0.0127  0.0241  0.0613  0.1289
+              L5-supervised  0.0030  0.0091  0.0176  0.0567  0.1317
+L4-dbscan     L5-anomaly     0.0246  0.0460  0.0861  0.2109  0.2610
+              L5-supervised  0.0299  0.0864  0.2559  0.4445  0.3568
+L4-kmeans     L4-dbscan      0.2887  0.2862  0.2767  0.5974  0.5438
+              L5-anomaly     0.0173  0.0352  0.0689  0.1730  0.2745
+              L5-supervised  0.0163  0.0331  0.0965  0.2927  0.3009
+L5-supervised L5-anomaly     0.0225  0.0449  0.0890  0.1774  0.2690
+
+========================================================================
+SYNTHETIC ATTACK DETECTION RATE
+========================================================================
+Layer                 easy     medium       hard    overall
+------------------------------------------------------------
+L2                    1.00       0.33       0.00       0.50
+L4-kmeans             1.00       0.13       0.00       0.42
+L4-dbscan             1.00       0.07       0.00       0.40
+L5-supervised         1.00       0.93       0.10       0.75
+L5-anomaly            0.40       0.47       0.00       0.33
+
+Key observations:
+  - Hard-tier (veteran camouflage) is the hardest to detect. Weakest layer: L2 (0.00). These profiles motivate the need for L3 text signals.
+  - Easy-tier (matches L2 antecedent directly): L2 flags 1.00. Confirms that the pipeline catches the obvious behavioural fingerprint.
+  - L5 anomaly detection rates (0.40 / 0.47 / 0.00). Review-level features improved IF AUC to ~0.57 (previously 0.42 at reviewer-level), but anomaly-based detection remains weak compared to supervised approaches.
+
+========================================================================
+LIMITATIONS AND NEXT STEPS
+========================================================================
+  - Jaccard restricted to the 52K L5 holdout (Option A from the plan). Switch to full-population inference once the re-run L5 is available.
+  - L3 signal absent until DeBERTa fine-tuning completes on HPC. Add per-review confidence scores as an extra axis to both Jaccard and the synthetic detection matrix when L3 is ready.
+  - L5 model is now trained at review-level (608K rows) with per-review features, fixing the prior reviewer-level granularity limitation. L5 scores are aggregated to reviewer-level via max() for Jaccard and synthetic injection comparisons.

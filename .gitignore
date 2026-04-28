@@ -10,6 +10,7 @@ L1_ETL_OLAP/output_csv/
 L1_ETL_OLAP/delta_lake/
 L2_FPGrowth/outputs/
 L4_Clustering/outputs/
+L5_Classification/outputs/
 
 # ---------------------------------------------------------------------------
 # Python
@@ -60,3 +61,4 @@ desktop.ini
 *.log
 *.tmp
 *.bak
+L5_Classification/outputs/l5_feature_table.csv
