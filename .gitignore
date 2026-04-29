@@ -62,3 +62,21 @@ desktop.ini
 *.tmp
 *.bak
 L5_Classification/outputs/l5_feature_table.csv
+
+# L3 large / temporary files
+L3/model/
+L3/model_local/
+L3/.venv-local/
+L3/outputs_local/
+L3/plots_local/
+L3/outputs/deberta_predictions.csv
+L3/outputs/deberta_embeddings.npy
+L3/*.zip
+L3/*.log
+
+# L5 large holdout CSVs (reproducible from scripts)
+L5_Classification/outputs/supervised_holdout_predictions.csv
+L5_Classification/outputs/anomaly_holdout_scores.csv
+L5_Classification/outputs/behavioral_baseline_scores.csv
+L5_Classification/outputs/ensemble_predictions.csv
+L5_Classification/outputs/supervised_best_model.joblib
