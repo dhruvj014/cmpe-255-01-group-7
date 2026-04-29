@@ -1,0 +1,8 @@
+{
+  "model": "microsoft/deberta-base",
+  "optimal_threshold": 0.425,
+  "f1_macro_at_optimal": 0.8411,
+  "f1_spam_at_optimal": 0.724,
+  "score_column": "deberta_spam_prob",
+  "threshold_objective": "f1_macro_on_val"
+}
