@@ -25,3 +25,4 @@ l2_rule_partial_mean
 l2_rule_partial_max
 kmeans_cluster_id
 dbscan_is_noise
+deberta_spam_prob

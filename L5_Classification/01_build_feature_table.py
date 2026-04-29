@@ -44,6 +44,7 @@ REVIEWER_PROFILE_CANDIDATES = [
 L2_RULES_PATH = PROJECT_ROOT / "L2_FPGrowth" / "outputs" / "spam_correlated_rules.csv"
 L4_KMEANS_PATH = PROJECT_ROOT / "L4_Clustering" / "outputs" / "reviewer_clusters.csv"
 L4_DBSCAN_PATH = PROJECT_ROOT / "L4_Clustering" / "outputs" / "dbscan_results.csv"
+L3_PREDICTIONS_PATH = PROJECT_ROOT / "L3" / "outputs" / "deberta_predictions.csv"
 
 TOP_L2_RULES = 50
 
@@ -297,6 +298,29 @@ def main() -> None:
     l4_features = _load_l4_features(profiles["user_id"])
     merged = merged.merge(l4_features, on="user_id", how="left")
 
+    # Step 5b: Join L3 DeBERTa spam probability per (user_id, prod_id, date)
+    has_l3 = L3_PREDICTIONS_PATH.exists()
+    if has_l3:
+        l3 = pd.read_csv(
+            L3_PREDICTIONS_PATH,
+            usecols=["user_id", "prod_id", "date", "deberta_spam_prob"],
+        )
+        # Reviews loaded above dropped 'date'; pull it back for the join only.
+        reviews_with_date = pd.read_csv(
+            reviews_path,
+            engine="python",
+            on_bad_lines="skip",
+            usecols=["user_id", "prod_id", "date"],
+        )
+        before = len(merged)
+        merged = merged.merge(reviews_with_date, on=["user_id", "prod_id"], how="left")
+        if len(merged) != before:
+            print(f"  WARNING: date join changed row count {before:,} -> {len(merged):,}")
+        merged = merged.merge(l3, on=["user_id", "prod_id", "date"], how="left")
+        merged.drop(columns=["date"], inplace=True)
+        n_match = int(merged["deberta_spam_prob"].notna().sum())
+        print(f"  L3 deberta_spam_prob matched: {n_match:,} / {len(merged):,}")
+
     # Step 6: Fill nulls from optional merges
     if "kmeans_cluster_id" in merged.columns:
         merged["kmeans_cluster_id"] = merged["kmeans_cluster_id"].fillna(-1)
@@ -306,6 +330,10 @@ def main() -> None:
     for col in ["l2_rule_match_count", "l2_rule_max_weight", "l2_rule_partial_mean", "l2_rule_partial_max"]:
         if col in merged.columns:
             merged[col] = merged[col].fillna(0)
+
+    if "deberta_spam_prob" in merged.columns:
+        median_prob = float(merged["deberta_spam_prob"].median())
+        merged["deberta_spam_prob"] = merged["deberta_spam_prob"].fillna(median_prob)
 
     # Save
     output_path = L5_OUTPUT_DIR / "l5_feature_table.csv"
@@ -337,6 +365,7 @@ def main() -> None:
         "l2_rules_used": int(len(l2_rules)),
         "has_kmeans": bool(L4_KMEANS_PATH.exists()),
         "has_dbscan": bool(L4_DBSCAN_PATH.exists()),
+        "has_l3": bool(has_l3),
     }
     (L5_OUTPUT_DIR / "l5_build_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 

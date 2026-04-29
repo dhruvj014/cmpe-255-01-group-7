@@ -23,9 +23,12 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import average_precision_score, f1_score, roc_auc_score, roc_curve
-from sklearn.model_selection import StratifiedGroupKFold, train_test_split
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
+
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from utils import get_group_stratified_split, impute_split, prepare_features  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 L5_DIR = PROJECT_ROOT / "L5_Classification"
@@ -36,83 +39,8 @@ INPUT_PATH = OUTPUT_DIR / "l5_feature_table.csv"
 RANDOM_STATE = 42
 
 
-def get_group_stratified_split(
-    X: pd.DataFrame,
-    y: np.ndarray,
-    groups: np.ndarray,
-    test_size: float = 0.20,
-    random_state: int = 42,
-) -> tuple[np.ndarray, np.ndarray]:
-    n_splits = max(2, int(round(1 / test_size)))
-    sgkf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-
-    best_split = None
-    best_gap = float("inf")
-
-    for tr_idx, te_idx in sgkf.split(X, y, groups):
-        current_ratio = len(te_idx) / len(y)
-        gap = abs(current_ratio - test_size)
-        if gap < best_gap:
-            best_gap = gap
-            best_split = (tr_idx, te_idx)
-
-    if best_split is None:
-        tr_idx, te_idx = train_test_split(
-            np.arange(len(y)),
-            test_size=test_size,
-            stratify=y,
-            random_state=random_state,
-        )
-        return tr_idx, te_idx
-
-    return best_split
-
-
-def _prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """Prepare review-level features. Label = is_spam, groups = user_id."""
-    leakage_cols = {
-        "user_id",
-        "prod_id",
-        "is_spam",
-        "spam_label",
-        "spam_rate",
-        "spam_count",
-        "is_spam_reviewer",
-        "label",
-    }
-    drop_cols = {"first_review_date", "last_review_date", "review_date", "date", "year_month"}
-
-    exclude = leakage_cols | drop_cols
-    X = df[[c for c in df.columns if c not in exclude]].copy()
-    y = df["is_spam"].astype(int).to_numpy()
-    groups = df["user_id"].to_numpy()
-
-    for col in X.columns:
-        if X[col].dtype == "bool":
-            X[col] = X[col].astype(int)
-
-    # One-hot encode kmeans_cluster_id only (no dbscan_cluster column)
-    cluster_cols = [c for c in ("kmeans_cluster_id",) if c in X.columns]
-    if cluster_cols:
-        for c in cluster_cols:
-            X[c] = X[c].astype(int).astype(str)
-        X = pd.get_dummies(X, columns=cluster_cols, drop_first=False)
-
-    cat_cols = [c for c in X.columns if X[c].dtype == "object"]
-    if cat_cols:
-        X = pd.get_dummies(X, columns=cat_cols, drop_first=False)
-
-    X = X.apply(pd.to_numeric, errors="coerce")
-
-    return X, y, groups
-
-
-def _impute_split(X_train: pd.DataFrame, X_test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Fill NaNs using training-set median only (no test-set leakage)."""
-    train_median = X_train.median(numeric_only=True)
-    X_train = X_train.fillna(train_median).fillna(0)
-    X_test = X_test.fillna(train_median).fillna(0)
-    return X_train, X_test
+_prepare_features = prepare_features
+_impute_split = impute_split
 
 
 def _evaluate(y_true: np.ndarray, scores: np.ndarray, pred_binary: np.ndarray, name: str) -> dict:

@@ -1,9 +1,12 @@
 """Run the full Layer-5 pipeline.
 
 Order:
-    1) Build fused feature table (L1 + L2 + L4 signals)
-    2) Train supervised models (Decision Tree / RF / SVM)
+    1) Build fused feature table (L1 + L2 + L3 + L4 signals)
+    2) Train supervised models (Decision Tree / Random Forest / MLP)
     3) Train anomaly models (Isolation Forest / LOF)
+    4) Stacked ensemble over saved holdout predictions
+    5) Error analysis on the best supervised model
+    6) Post-hoc calibration (Platt + isotonic)
 """
 
 from __future__ import annotations
@@ -27,6 +30,9 @@ def main() -> None:
     _run("01_build_feature_table.py")
     _run("02_train_models.py")
     _run("03_anomaly_detection.py")
+    _run("06_ensemble.py")
+    _run("07_error_analysis.py")
+    _run("08_calibration.py")
     print("\nLayer-5 pipeline completed.")
 
 
