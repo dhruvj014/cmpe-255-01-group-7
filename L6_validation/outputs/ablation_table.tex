@@ -1,0 +1,18 @@
+\begin{table}[!t]
+\centering
+\caption{Ablation study across layer configurations on the L5 holdout.}
+\label{tab:ablation}
+\begin{tabular}{lcccc}
+\toprule
+Configuration & AUC-ROC & F1@optimal & Avg Precision & Recall@FPR=0.1 \\
+\midrule
+L2-only & 0.716 & 0.385 & 0.230 & 0.000 \\
+L4-only & 0.773 & 0.417 & 0.282 & 0.164 \\
+L5-supervised-only & 0.819 & 0.437 & 0.368 & 0.384 \\
+L5-anomaly-only & 0.572 & 0.254 & 0.176 & 0.178 \\
+L2+L4 & 0.774 & 0.415 & 0.283 & 0.203 \\
+L2+L4+L5 (full behavioral) & 0.815 & 0.438 & 0.365 & 0.386 \\
+Full + L3 & 0.936 & 0.741 & 0.798 & 0.831 \\
+\bottomrule
+\end{tabular}
+\end{table}
