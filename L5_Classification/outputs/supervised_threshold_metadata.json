@@ -1,0 +1,17 @@
+{
+  "Decision Tree": {
+    "optimal_threshold": 0.8239755101836113,
+    "f1_at_optimal": 0.7340413962599468,
+    "f1_at_default_0.5": 0.6726861040449501
+  },
+  "Random Forest": {
+    "optimal_threshold": 0.6295632241637247,
+    "f1_at_optimal": 0.722116301189297,
+    "f1_at_default_0.5": 0.7143038054834421
+  },
+  "MLP": {
+    "optimal_threshold": 0.3303484935239066,
+    "f1_at_optimal": 0.7408153718330448,
+    "f1_at_default_0.5": 0.7230854605993341
+  }
+}
