@@ -54,8 +54,9 @@ from utils import (
 RANDOM_STATE = 42
 SPAM_RATE_THRESHOLD = 0.20  # matches plan: cluster flagged if spam_rate_mean > 0.20
 
-LAYERS = ["L2", "L4-kmeans", "L4-dbscan", "L5-supervised", "L5-anomaly"]
-TIER_COUNTS = {"easy": 15, "medium": 15, "hard": 10}
+LAYERS = ["L2", "L4-kmeans", "L4-dbscan", "L3-text", "L5-supervised", "L5-anomaly"]
+TIER_COUNTS = {"easy": 15, "medium": 15, "hard": 40}
+L3_THRESHOLD = 0.425  # DeBERTa optimal threshold from L3/outputs/deberta_metrics.json
 
 
 # ---------------------------------------------------------------------------
@@ -89,14 +90,15 @@ def _make_profile(rng: np.random.Generator, tier: str, idx: int) -> dict:
         unique_sellers = max(1, int(round(review_count * _sample(rng, 0.4, 0.7))))
         avg_review_length = float(rng.normal(90, 20))
     elif tier == "hard":
-        review_count = int(rng.integers(8, 16))  # 8-15
-        tenure_days = _sample(rng, 400, 800)
-        max_seller_fraction = _sample(rng, 0.15, 0.30)
-        burst_score = _sample(rng, 1.0, 2.0)
-        rating_entropy = _sample(rng, 1.0, 1.5)
-        avg_rating = _sample(rng, 3.5, 4.0)
-        rating_std = _sample(rng, 0.9, 1.3)
-        unique_sellers = max(2, int(round(review_count * _sample(rng, 0.6, 0.9))))
+        # Expanded hard tier: 40 profiles spanning a wider plausibility envelope.
+        review_count = int(rng.integers(6, 19))  # 6-18
+        tenure_days = _sample(rng, 300, 1000)
+        max_seller_fraction = _sample(rng, 0.10, 0.35)
+        burst_score = _sample(rng, 0.5, 2.5)
+        rating_entropy = _sample(rng, 0.9, 1.6)
+        avg_rating = float(rng.choice([3, 4, 5], p=[0.20, 0.35, 0.45]))
+        rating_std = _sample(rng, 0.7, 1.3)
+        unique_sellers = max(2, int(round(review_count * _sample(rng, 0.5, 0.95))))
         avg_review_length = float(rng.normal(130, 25))
     else:
         raise ValueError(f"Unknown tier {tier!r}")
@@ -173,6 +175,17 @@ def _generate_synthetic_reviews(profiles: pd.DataFrame) -> pd.DataFrame:
             day_of_week = int(rng.integers(0, 7))
             month = int(rng.integers(1, 13))
 
+            # Synthetic deberta_spam_prob — per-tier model of attacker text quality.
+            #   easy:   uniform(0.55, 0.95) — clumsy, text reads as obvious spam
+            #   medium: uniform(0.20, 0.70) — moderate camouflage
+            #   hard:   uniform(0.05, 0.40) — sophisticated, text reads natural
+            if tier == "easy":
+                deberta_spam_prob = float(rng.uniform(0.55, 0.95))
+            elif tier == "medium":
+                deberta_spam_prob = float(rng.uniform(0.20, 0.70))
+            else:
+                deberta_spam_prob = float(rng.uniform(0.05, 0.40))
+
             review_row = {
                 "user_id": prof["user_id"],
                 "tier": tier,
@@ -199,6 +212,8 @@ def _generate_synthetic_reviews(profiles: pd.DataFrame) -> pd.DataFrame:
                 "avg_days_between_reviews": float(prof["avg_days_between_reviews"]),
                 "burst_score": float(prof["burst_score"]),
                 "rating_entropy": float(prof["rating_entropy"]),
+                # L3 text signal
+                "deberta_spam_prob": round(deberta_spam_prob, 6),
             }
             review_rows.append(review_row)
 
@@ -311,6 +326,20 @@ def detect_l5_supervised(
     profile_scores = np.array([score_map.get(uid, 0.0) for uid in profiles["user_id"]])
     profile_preds = (profile_scores >= threshold).astype(int)
 
+    return profile_preds, profile_scores
+
+
+def detect_l3_text(
+    reviews_with_features: pd.DataFrame,
+    profiles: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray]:
+    """L3-text-only detection: threshold deberta_spam_prob per review,
+    aggregate to reviewer-level via max."""
+    reviews_with_features = reviews_with_features.copy()
+    reviewer_max = reviews_with_features.groupby("user_id", as_index=False)["deberta_spam_prob"].max()
+    score_map = dict(zip(reviewer_max["user_id"], reviewer_max["deberta_spam_prob"]))
+    profile_scores = np.array([score_map.get(uid, 0.0) for uid in profiles["user_id"]])
+    profile_preds = (profile_scores >= L3_THRESHOLD).astype(int)
     return profile_preds, profile_scores
 
 
@@ -478,6 +507,10 @@ def main() -> None:
     synth_reviews = synth_reviews.merge(reviewer_meta, on="user_id", how="left")
     print(f"  Generated {len(synth_reviews)} synthetic reviews")
 
+    # --- L3-text-only detection ---
+    print("L3-text detection (deberta_spam_prob threshold)...")
+    l3_flag, l3_score = detect_l3_text(synth_reviews, profiles)
+
     # --- L5 supervised ---
     print("L5 supervised model inference (review-level)...")
     sup_flag, sup_score = detect_l5_supervised(synth_reviews, profiles)
@@ -493,6 +526,8 @@ def main() -> None:
     results["L4-kmeans_cluster"] = kmeans_ids
     results["L4-dbscan_flag"] = db_flag
     results["L4-dbscan_cluster"] = dbscan_ids
+    results["L3-text_flag"] = l3_flag
+    results["L3-text_score"] = l3_score
     results["L5-supervised_flag"] = sup_flag
     results["L5-supervised_score"] = sup_score
     results["L5-anomaly_flag"] = anom_flag
@@ -507,6 +542,7 @@ def main() -> None:
         "L2": "L2_flag",
         "L4-kmeans": "L4-kmeans_flag",
         "L4-dbscan": "L4-dbscan_flag",
+        "L3-text": "L3-text_flag",
         "L5-supervised": "L5-supervised_flag",
         "L5-anomaly": "L5-anomaly_flag",
     }
@@ -529,7 +565,7 @@ def main() -> None:
     ax.legend(loc="upper right", ncol=3)
     plt.tight_layout()
     chart_path = PLOT_DIR / "detection_rate_by_layer.png"
-    fig.savefig(chart_path, dpi=150)
+    fig.savefig(chart_path, dpi=300)
     plt.close(fig)
     print(f"Saved {chart_path}")
 

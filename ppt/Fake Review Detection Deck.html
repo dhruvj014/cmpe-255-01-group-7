@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Fake Review Detection on Yelp · Group 7</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="deck-stage.js"></script>
+<style>
+  :root {
+    --bg: #0F1422;
+    --bg-2: #141A2C;
+    --fg: #F5F7FB;
+    --body: #C7CDDC;
+    --mute: #7A839E;
+    --accent: #4ADE80;
+    --warn: #FB923C;
+    --card: #F7F8FA;
+    --line: rgba(245,247,251,0.08);
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "tnum" 1, "ss01" 1;
+  }
+
+  deck-stage > section {
+    background: var(--bg);
+    color: var(--fg);
+    overflow: hidden;
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* ========== Shared layer slide template ========== */
+  .layer-slide {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    padding: 72px 96px 56px 96px;
+    box-sizing: border-box;
+    height: 100%;
+  }
+
+  .layer-tag {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 26px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .layer-tag .num {
+    color: var(--accent);
+  }
+  .layer-tag .sep { color: var(--mute); }
+  .layer-tag .name { color: var(--fg); letter-spacing: 0.16em; }
+
+  .layer-slide h1.title {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 72px;
+    line-height: 1.04;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    margin: 22px 0 0 0;
+    color: var(--fg);
+    max-width: 1500px;
+  }
+  .title-rule {
+    width: 92px;
+    height: 4px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin: 28px 0 0 0;
+  }
+
+  .body-grid {
+    display: grid;
+    grid-template-columns: 1.55fr 1fr;
+    gap: 64px;
+    margin-top: 44px;
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .figure-card {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.3);
+    padding: 28px 28px 18px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .figure-card img {
+    max-width: 100%;
+    max-height: 480px;
+    object-fit: contain;
+    display: block;
+  }
+  .figure-caption {
+    font-size: 24px;
+    color: #4a5168;
+    font-family: 'Inter', sans-serif;
+    margin-top: 16px;
+    text-align: center;
+    letter-spacing: 0.01em;
+  }
+
+  /* Right column */
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 36px;
+  }
+
+  .hero-metric {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 144px;
+    font-weight: 700;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+    font-feature-settings: "tnum" 1;
+  }
+  .hero-metric.smaller { font-size: 108px; }
+  .hero-metric.dual { font-size: 86px; line-height: 1.0; }
+  .hero-metric.arrow { font-size: 76px; line-height: 1.0; }
+
+  .hero-caption {
+    font-size: 24px;
+    color: var(--body);
+    font-weight: 400;
+    line-height: 1.4;
+    margin-top: 14px;
+    max-width: 460px;
+  }
+
+  .stack-metric { display: flex; flex-direction: column; gap: 6px; }
+  .stack-metric + .stack-metric { margin-top: 14px; }
+
+  ul.bullets {
+    list-style: none;
+    padding: 0;
+    margin: 14px 0 0 0;
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+  }
+  ul.bullets li {
+    position: relative;
+    padding-left: 22px;
+    font-size: 24px;
+    line-height: 1.45;
+    color: var(--body);
+    margin-bottom: 14px;
+    font-weight: 400;
+  }
+  ul.bullets li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+  ul.bullets li code, ul.bullets li .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    color: #DCE2F0;
+    background: rgba(255,255,255,0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    margin-top: 32px;
+    font-size: 24px;
+    color: var(--mute);
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+  }
+  .footer .cue {
+    font-style: italic;
+    color: var(--mute);
+    max-width: 1000px;
+  }
+  .footer .who {
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    font-size: 24px;
+    white-space: nowrap;
+    margin-left: 32px;
+  }
+
+  /* ========== Slide 1: Title ========== */
+  .title-slide {
+    position: relative;
+    height: 100%;
+    padding: 96px 96px 80px 96px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+  }
+
+  .top-strip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 26px;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-weight: 500;
+  }
+  .top-strip .pip {
+    width: 9px; height: 9px; background: var(--accent); border-radius: 50%;
+    box-shadow: 0 0 14px rgba(74, 222, 128, 0.6);
+  }
+  .top-strip .dot { color: var(--mute); }
+
+  .hero-block {
+    margin-top: -10px;
+  }
+  .hero-block .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    letter-spacing: 0.22em;
+    color: var(--mute);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .hero-block h1 {
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 600;
+    font-size: 132px;
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    margin: 0;
+    max-width: 1500px;
+    color: var(--fg);
+  }
+  .hero-block h1 .accent { color: var(--accent); }
+  .hero-block .subtitle {
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 500;
+    font-size: 44px;
+    color: var(--body);
+    margin-top: 32px;
+    letter-spacing: -0.015em;
+  }
+
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 64px;
+  }
+  .group-line {
+    font-size: 24px;
+    color: var(--body);
+    font-weight: 500;
+    margin-bottom: 22px;
+    letter-spacing: 0.01em;
+  }
+  .authors {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 10px 64px;
+    font-family: 'Inter', sans-serif;
+    font-size: 26px;
+    color: var(--fg);
+  }
+  .authors .name { font-weight: 500; }
+  .authors .id {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--mute);
+    font-size: 24px;
+    margin-left: 14px;
+  }
+  .repo {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    font-size: 24px;
+    text-align: right;
+  }
+  .repo .label {
+    color: var(--mute);
+    display: block;
+    font-size: 24px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* Pipeline iso illustration in lower right */
+  .pipeline-iso {
+    position: absolute;
+    right: 96px;
+    bottom: 260px;
+    width: 420px;
+    height: 200px;
+    opacity: 0.14;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .title-slide > * { position: relative; z-index: 1; }
+
+  /* L3 custom infographic */
+  .l3-info {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 36px 36px 78px 36px;
+    height: 100%;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 1fr auto 1.3fr auto 1fr;
+    align-items: center;
+    gap: 18px;
+    position: relative;
+  }
+  .l3-bubble {
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.35);
+    border-radius: 14px 14px 14px 4px;
+    padding: 16px 18px;
+    color: var(--fg);
+    font-size: 24px;
+    font-style: italic;
+    line-height: 1.4;
+    box-shadow: 0 0 24px rgba(74,222,128,0.10);
+  }
+  .l3-bubble .tag {
+    display: block;
+    font-style: normal;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    color: var(--mute);
+    margin-bottom: 8px;
+    letter-spacing: 0.12em;
+  }
+  .l3-arrow {
+    color: var(--mute);
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 32px;
+    font-weight: 600;
+  }
+  .l3-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+  }
+  .l3-stack .layer-bar {
+    width: 200px;
+    height: 14px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.06);
+  }
+  .l3-stack .layer-bar.lit {
+    background: var(--accent);
+    box-shadow: 0 0 10px rgba(74,222,128,0.4);
+  }
+  .l3-stack .stack-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    color: var(--body);
+    margin-top: 16px;
+    letter-spacing: 0.06em;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .l3-stack .stack-label .small { color: var(--mute); display: block; font-size: 24px; margin-top: 4px; }
+
+  .l3-dial {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .dial-svg { display: block; }
+  .dial-value {
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 700;
+    font-size: 40px;
+    color: var(--accent);
+    margin-top: -52px;
+    letter-spacing: -0.02em;
+  }
+  .dial-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    color: var(--body);
+    margin-top: 12px;
+    letter-spacing: 0.06em;
+  }
+
+  .l3-callout {
+    position: absolute;
+    left: 28px;
+    right: 28px;
+    bottom: 22px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    color: var(--mute);
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+
+  /* L5 before/after infographic */
+  .l5-info {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 40px 36px 32px 36px;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .l5-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: 20px;
+  }
+  .l5-card {
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 22px 18px 22px;
+  }
+  .l5-card .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--mute);
+    margin-bottom: 4px;
+  }
+  .l5-card h3 {
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 600;
+    font-size: 26px;
+    margin: 0 0 18px 0;
+    color: var(--fg);
+    letter-spacing: -0.015em;
+  }
+  .l5-card.muted h3 { color: var(--body); }
+  .l5-bar-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 70px;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+  .l5-bar-row .metric-name {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--mute);
+    font-size: 24px;
+    letter-spacing: 0.1em;
+  }
+  .l5-bar-track {
+    height: 12px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .l5-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+  }
+  .l5-bar-fill.muted { background: #5a627a; }
+  .l5-bar-fill.mint { background: var(--accent); }
+  .l5-bar-row .val {
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 600;
+    font-size: 24px;
+    color: var(--fg);
+    text-align: right;
+    letter-spacing: -0.01em;
+  }
+  .l5-card.muted .l5-bar-row .val { color: var(--body); }
+
+  .l5-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .l5-arrow svg {
+    filter: drop-shadow(0 0 12px rgba(74,222,128,0.35));
+  }
+  .l5-arrow .arrow-label {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    font-size: 24px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    line-height: 1.4;
+    max-width: 130px;
+  }
+
+  .l5-strip {
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    color: var(--body);
+    letter-spacing: 0.04em;
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .l5-strip .key { color: var(--mute); }
+  .l5-strip .accent { color: var(--accent); }
+
+  /* L7 dual figure card */
+  .l7-stack {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: 16px;
+    height: 100%;
+    min-height: 0;
+  }
+  .l7-main {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.3);
+    padding: 22px 24px 12px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    position: relative;
+  }
+  .l7-main img { max-width: 100%; max-height: 360px; object-fit: contain; }
+  .l7-inset {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 168px;
+    background: var(--card);
+    border-radius: 10px;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+    padding: 8px;
+    border: 1px solid rgba(0,0,0,0.06);
+  }
+  .l7-inset img { max-width: 100%; display: block; }
+  .l7-inset .inset-cap {
+    font-size: 24px;
+    color: #4a5168;
+    text-align: center;
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.08em;
+  }
+  .l7-cap {
+    font-size: 24px;
+    color: #4a5168;
+    text-align: center;
+    margin-top: 10px;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .warn-callout {
+    border-left: 0;
+    background: rgba(251,146,60,0.08);
+    border: 1px solid rgba(251,146,60,0.35);
+    border-radius: 12px;
+    padding: 14px 18px;
+    color: var(--warn);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+
+  /* slide-count overlay restyle if rendered by deck-stage */
+  deck-stage::part(counter) { color: var(--mute); }
+
+  /* speaker notes hidden */
+</style>
+</head>
+<body>
+
+<deck-stage width="1920" height="1080">
+
+  <!-- ============================ SLIDE 1: TITLE ============================ -->
+  <section data-label="01 Title">
+    <div class="title-slide">
+      <div class="top-strip">
+        <span class="pip"></span>
+        608,598 reviews
+        <span class="dot">·</span>
+        6 signal layers
+        <span class="dot">·</span>
+        0.944 AUC
+      </div>
+
+      <div class="hero-block">
+        <div class="eyebrow">Fake Review Detection</div>
+        <h1>Fake Review<br/>Detection<br/><span class="accent">on Yelp.</span></h1>
+        <div class="subtitle">Multi-Signal Analysis on YelpZip</div>
+      </div>
+
+      <div class="meta-row">
+        <div>
+          <div class="group-line">Group 7 · CMPE 255 · Spring 2026</div>
+          <div class="authors">
+            <div><span class="name">Himanshu Jain</span><span class="id">019098794</span></div>
+            <div><span class="name">Disha Jadav</span><span class="id">018484362</span></div>
+            <div><span class="name">Nitish Kumar</span><span class="id">019155916</span></div>
+            <div><span class="name">Dhruv Sachin Jain</span><span class="id">019150859</span></div>
+          </div>
+        </div>
+        <div class="repo">
+          <span class="label">Repository</span>
+          github.com/dhruvj014/cmpe-255-01-group-7
+        </div>
+      </div>
+
+      <!-- isometric pipeline illustration -->
+      <svg class="pipeline-iso" viewBox="0 0 540 280" fill="none">
+        <defs>
+          <linearGradient id="nodeFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4ADE80" stop-opacity="0.9"/>
+            <stop offset="1" stop-color="#4ADE80" stop-opacity="0.4"/>
+          </linearGradient>
+        </defs>
+        <g stroke="#4ADE80" stroke-width="1.2" opacity="0.8">
+          <line x1="80" y1="200" x2="160" y2="160"/>
+          <line x1="160" y1="160" x2="240" y2="120"/>
+          <line x1="240" y1="120" x2="320" y2="80"/>
+          <line x1="320" y1="80" x2="400" y2="40"/>
+          <line x1="400" y1="40" x2="480" y2="0"/>
+        </g>
+        <g fill="url(#nodeFill)" stroke="#4ADE80">
+          <polygon points="80,182 102,191 102,209 80,218 58,209 58,191"/>
+          <polygon points="160,142 182,151 182,169 160,178 138,169 138,151"/>
+          <polygon points="240,102 262,111 262,129 240,138 218,129 218,111"/>
+          <polygon points="320,62 342,71 342,89 320,98 298,89 298,71"/>
+          <polygon points="400,22 422,31 422,49 400,58 378,49 378,31"/>
+          <polygon points="480,-18 502,-9 502,9 480,18 458,9 458,-9"/>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ============================ SLIDE 2: L1 ============================ -->
+  <section data-label="02 L1 ETL and OLAP">
+    <div class="layer-slide">
+      <div>
+        <div class="layer-tag">
+          <span class="num">L1</span>
+          <span class="sep">·</span>
+          <span class="name">ETL and OLAP</span>
+        </div>
+        <h1 class="title">PySpark ETL and<br/>Reviewer-Level EDA</h1>
+        <div class="title-rule"></div>
+      </div>
+
+      <div class="body-grid">
+        <div class="figure-card">
+          <img src="figures/reviewer_feature_distributions.png" alt="Reviewer feature distributions: review count, tenure, seller fraction, spam rate, burst score, rating entropy" />
+          <div class="figure-caption">Reviewer feature distributions across 260,277 profiles, YelpZip.</div>
+        </div>
+        <div class="right-col">
+          <div>
+            <div class="hero-metric">14×</div>
+            <div class="hero-caption">spam-rate gap, new (&lt;30 days) vs veteran (&gt;365 days) reviewers</div>
+          </div>
+          <ul class="bullets">
+            <li>PySpark ETL across 5 TSV files into review, reviewer, and seller feature tables</li>
+            <li>4 OLAP cubes; <code>burst_score</code> and <code>rating_entropy</code> highlight temporal and rating patterns</li>
+            <li>65% single-review users create bimodal <code>spam_rate</code> (0% or 100%), motivating L5 redesign</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="cue">The bimodal spam_rate distribution drives every downstream design choice.</div>
+        <div class="who">Himanshu Jain</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SLIDE 3: L2 ============================ -->
+  <section data-label="03 L2 FP-Growth">
+    <div class="layer-slide">
+      <div>
+        <div class="layer-tag">
+          <span class="num">L2</span>
+          <span class="sep">·</span>
+          <span class="name">FP-Growth Association Rules</span>
+        </div>
+        <h1 class="title">FP-Growth Association Rule Mining<br/>on Discretized Reviewer Baskets</h1>
+        <div class="title-rule"></div>
+      </div>
+
+      <div class="body-grid">
+        <div class="figure-card">
+          <img src="figures/l2_top_rules_spam_rate.png" alt="Top association rules by antecedent spam rate" />
+          <div class="figure-caption">Top spam-correlated association rules vs. 13.2% baseline.</div>
+        </div>
+        <div class="right-col">
+          <div>
+            <div class="hero-metric">29.1%</div>
+            <div class="hero-caption">spam rate for the dominant rule fingerprint, 2.2× baseline</div>
+          </div>
+          <ul class="bullets">
+            <li>260,277 reviewer baskets, 4 discretized features, 11 one-hot items</li>
+            <li>FP-Growth at <code>min_support = 0.05</code> yields 35 itemsets, 24 spam-correlated rules</li>
+            <li>Hero antecedent: <code>{tenure=new, count=Low, seller_conc=High}</code> covers 73% of reviewers</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="cue">FP-Growth surfaces the dominant spam fingerprint without hand-coded rules.</div>
+        <div class="who">Dhruv Sachin Jain</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SLIDE 4: L3 ============================ -->
+  <section data-label="04 L3 DeBERTa">
+    <div class="layer-slide">
+      <div>
+        <div class="layer-tag">
+          <span class="num">L3</span>
+          <span class="sep">·</span>
+          <span class="name">DeBERTa Text Classification</span>
+        </div>
+        <h1 class="title">Fine-Tuning DeBERTa-v3-base<br/>on Review Text</h1>
+        <div class="title-rule"></div>
+      </div>
+
+      <div class="body-grid">
+        <div style="display: flex; flex-direction: column; gap: 16px; min-height: 0;">
+          <!-- IO concept strip -->
+          <div style="background: var(--bg-2); border: 1px solid var(--line); border-radius: 18px; padding: 24px 28px; flex: 0 0 auto; display: flex; align-items: center; gap: 24px;">
+            <div class="l3-bubble" style="font-size: 24px; flex: 0 0 auto;">
+              <span class="tag">REVIEW TEXT</span>
+              "Best place ever!!!"
+            </div>
+            <div style="color: var(--mute); font-family: 'Inter Tight', sans-serif; font-size: 36px; font-weight: 600; flex: 0 0 auto;">→</div>
+            <div style="display: flex; align-items: center; gap: 14px; flex: 0 0 auto;">
+              <svg width="70" height="70" viewBox="0 0 160 160">
+                <circle cx="80" cy="80" r="62" stroke="rgba(255,255,255,0.08)" stroke-width="14" fill="none"/>
+                <circle cx="80" cy="80" r="62" stroke="#4ADE80" stroke-width="14" fill="none"
+                  stroke-dasharray="389.557" stroke-dashoffset="85.7"
+                  stroke-linecap="round" transform="rotate(-90 80 80)"
+                  style="filter: drop-shadow(0 0 8px rgba(74,222,128,0.5));"/>
+              </svg>
+              <div>
+                <div style="font-family: 'Inter Tight', sans-serif; font-weight: 700; font-size: 32px; color: var(--accent);">0.78</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 24px; color: var(--body);">deberta_spam_prob</div>
+              </div>
+            </div>
+            <div style="margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 24px; color: var(--mute); text-align: right; line-height: 1.5;">422K reviews · 99.8M params<br/>6 epochs · AdamW lr 4e-5</div>
+          </div>
+          <!-- ROC curve -->
+          <div class="figure-card" style="flex: 1 1 0; min-height: 0;">
+            <img src="figures/l3_roc.png" alt="DeBERTa ROC curve, AUC 0.93" style="max-height: 360px;" />
+            <div class="figure-caption">DeBERTa-v3-base ROC on 53,687 held-out reviews.</div>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div>
+            <div class="hero-metric">0.93</div>
+            <div class="hero-caption">AUC-ROC on 53,687 held-out reviews</div>
+          </div>
+          <ul class="bullets">
+            <li>F1-macro 0.841 at threshold 0.425, tuned on val for class balance</li>
+            <li>Per-review <code>deberta_spam_prob</code> flows into Layer 5 as the 28th feature</li>
+            <li>Standalone text classifier already beats every behavioral signal on AUC</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="cue">Text alone delivers 0.93 AUC and becomes Layer 5's most important feature.</div>
+        <div class="who">Nitish Kumar</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SLIDE 5: L4 ============================ -->
+  <section data-label="05 L4 Clustering">
+    <div class="layer-slide">
+      <div>
+        <div class="layer-tag">
+          <span class="num">L4</span>
+          <span class="sep">·</span>
+          <span class="name">K-Means and DBSCAN Clustering</span>
+        </div>
+        <h1 class="title">K-Means and DBSCAN Reveal<br/>Dual Spam Modalities</h1>
+        <div class="title-rule"></div>
+      </div>
+
+      <div class="body-grid">
+        <div class="figure-card">
+          <img src="figures/l4_kmeans_spam_rate_by_cluster.png" alt="Spam rate by K-Means cluster" />
+          <div class="figure-caption">Spam rate by K-Means cluster. Clusters 0 and 3 carry the bulk of spam.</div>
+        </div>
+        <div class="right-col">
+          <div>
+            <div class="stack-metric">
+              <div class="hero-metric dual">27.6%</div>
+              <div class="hero-caption">Cluster 0, 5-star fakes</div>
+            </div>
+            <div class="stack-metric">
+              <div class="hero-metric dual">36.5%</div>
+              <div class="hero-caption">Cluster 3, 1-star attacks</div>
+            </div>
+          </div>
+          <ul class="bullets">
+            <li>K = 5 chosen by elbow method on inertia</li>
+            <li>Clusters 0 and 3 share behavioral profile but split by mean rating</li>
+            <li>DBSCAN cluster 13 (19,051 reviewers) reaches 47.7% spam, 3.6× baseline</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="cue">Same behavioral shell, opposite intent: promotion vs. attack.</div>
+        <div class="who">Dhruv Sachin Jain</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SLIDE 6: L5 ============================ -->
+  <section data-label="06 L5 Fusion">
+    <div class="layer-slide">
+      <div>
+        <div class="layer-tag">
+          <span class="num">L5</span>
+          <span class="sep">·</span>
+          <span class="name">Classification, Fusion, Calibration</span>
+        </div>
+        <h1 class="title">Multi-Signal Classification,<br/>Stacked Ensemble, Calibration</h1>
+        <div class="title-rule"></div>
+      </div>
+
+      <div class="body-grid">
+        <div class="l5-info">
+          <div class="l5-row">
+            <div class="l5-card muted">
+              <div class="label">Before</div>
+              <h3>Behavioral only</h3>
+              <div class="l5-bar-row">
+                <span class="metric-name">AUC</span>
+                <div class="l5-bar-track"><div class="l5-bar-fill muted" style="width: 81.9%"></div></div>
+                <span class="val">0.819</span>
+              </div>
+              <div class="l5-bar-row">
+                <span class="metric-name">F1</span>
+                <div class="l5-bar-track"><div class="l5-bar-fill muted" style="width: 43.7%"></div></div>
+                <span class="val">0.437</span>
+              </div>
+              <div class="l5-bar-row">
+                <span class="metric-name">AP</span>
+                <div class="l5-bar-track"><div class="l5-bar-fill muted" style="width: 36.8%"></div></div>
+                <span class="val">0.368</span>
+              </div>
+            </div>
+
+            <div class="l5-arrow">
+              <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                <path d="M8 30 L46 30 M34 16 L48 30 L34 44" stroke="#4ADE80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div class="arrow-label">+ L3<br/>deberta_spam_prob</div>
+            </div>
+
+            <div class="l5-card">
+              <div class="label" style="color: var(--accent);">After</div>
+              <h3>Multi-signal</h3>
+              <div class="l5-bar-row">
+                <span class="metric-name">AUC</span>
+                <div class="l5-bar-track"><div class="l5-bar-fill mint" style="width: 94.4%"></div></div>
+                <span class="val">0.944</span>
+              </div>
+              <div class="l5-bar-row">
+                <span class="metric-name">F1</span>
+                <div class="l5-bar-track"><div class="l5-bar-fill mint" style="width: 74.1%"></div></div>
+                <span class="val">0.741</span>
+              </div>
+              <div class="l5-bar-row">
+                <span class="metric-name">AP</span>
+                <div class="l5-bar-track"><div class="l5-bar-fill mint" style="width: 80.7%"></div></div>
+                <span class="val">0.807</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="l5-strip">
+            <span><span class="key">Stacked ensemble AUC</span> <span class="accent">0.936</span></span>
+            <span><span class="key">Isotonic ECE</span> <span class="accent">0.011 → 0.003</span></span>
+          </div>
+          <!-- RF feature importance inset -->
+          <div style="margin-top: 4px;">
+            <div style="background: var(--card); border-radius: 10px; box-shadow: 0 12px 28px rgba(0,0,0,0.4); padding: 10px 14px 10px 14px; display: flex; align-items: center; gap: 14px;">
+              <img src="figures/l5_random_forest_feature_importance.png" alt="RF feature importance" style="max-width: 100%; max-height: 120px; object-fit: contain; display: block;" />
+            </div>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div>
+            <div class="stack-metric">
+              <div class="hero-metric arrow">0.683 → 0.944</div>
+              <div class="hero-caption">MLP AUC across the project lifetime</div>
+            </div>
+            <div class="stack-metric">
+              <div class="hero-metric arrow">0.003 → 0.741</div>
+              <div class="hero-caption">MLP F1@opt across the project lifetime</div>
+            </div>
+          </div>
+          <ul class="bullets">
+            <li>Granularity redesign (reviewer to review level) plus L3 text fusion</li>
+            <li>MLP, Random Forest, Decision Tree all exceed AUC 0.93 post-fusion</li>
+            <li>Isotonic calibration drops Expected Calibration Error to 0.003</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="cue">Granularity fix and text fusion convert the model from broken to publishable.</div>
+        <div class="who">Disha Jadav</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SLIDE 7: L6 ============================ -->
+  <section data-label="07 L6 Validation">
+    <div class="layer-slide">
+      <div>
+        <div class="layer-tag">
+          <span class="num">L6</span>
+          <span class="sep">·</span>
+          <span class="name">Robustness Validation</span>
+        </div>
+        <h1 class="title">Robustness via Synthetic Attacks<br/>and Cross-Signal Jaccard</h1>
+        <div class="title-rule"></div>
+      </div>
+
+      <div class="body-grid">
+        <div class="l7-stack">
+          <div class="l7-main">
+            <img src="figures/detection_rate_by_layer.png" alt="Synthetic attack detection rate by layer and tier" />
+            <div class="l7-inset">
+              <img src="figures/jaccard_heatmap.png" alt="Cross-signal Jaccard similarity heatmap"/>
+              <div class="inset-cap">JACCARD OVERLAP</div>
+            </div>
+            <div class="l7-cap">Synthetic attack detection by layer; Jaccard overlap inset.</div>
+          </div>
+        </div>
+        <div class="right-col">
+          <div>
+            <div class="hero-metric smaller">33%</div>
+            <div class="hero-caption">hard-tier camouflage caught by the fused L5-supervised model</div>
+          </div>
+          <div class="warn-callout">
+            Next-best single signal: 17% (L4-DBSCAN); fusion nearly doubles it
+          </div>
+          <ul class="bullets">
+            <li>70 synthetic attackers across easy (15), medium (15), hard (40) tiers</li>
+            <li>L3-text alone solves the medium tier at 100%; behavioral signals reach 7 to 13%</li>
+            <li>Cross-signal Jaccard as low as 0.007 confirms complementary signals</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="cue">Fusion lifts hard-tier detection to 33%, nearly double the next-best single signal (L4-DBSCAN at 17%).</div>
+        <div class="who">Himanshu Jain</div>
+      </div>
+    </div>
+  </section>
+
+</deck-stage>
+
+</body>
+</html>

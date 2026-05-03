@@ -4,6 +4,7 @@ Order:
     1) Cross-signal Jaccard stability
     2) Synthetic attack injection + per-layer detection
     3) Consolidated summary report
+    4) Ablation study across layer subsets
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ def main() -> None:
     _run("01_jaccard_stability.py")
     _run("02_synthetic_injection.py")
     _run("03_summary_report.py")
+    _run("04_ablation_study.py")
     print("\nLayer-6 validation completed.")
 
 

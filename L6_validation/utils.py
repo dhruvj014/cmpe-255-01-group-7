@@ -110,12 +110,18 @@ L5_L4_FEATURES = [
     "dbscan_is_noise",
 ]
 
+# L3 text-classifier signal (added 2026-04-28 after L3->L5 integration).
+L5_L3_FEATURES = [
+    "deberta_spam_prob",
+]
+
 # Combined raw features list (before one-hot encoding)
 L5_RAW_FEATURES = (
     L5_REVIEW_OWN_FEATURES
     + L5_REVIEWER_AGG_FEATURES
     + L5_L2_FEATURES
     + L5_L4_FEATURES
+    + L5_L3_FEATURES
 )
 
 

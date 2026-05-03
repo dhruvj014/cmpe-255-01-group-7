@@ -53,6 +53,7 @@ HEATMAP_K = 2000
 SIGNALS = [
     "L1-behavioral",
     "L2-rules",
+    "L3-text",
     "L4-kmeans",
     "L4-dbscan",
     "L5-supervised",
@@ -91,6 +92,17 @@ def _load_rankings(holdout: set) -> dict[str, pd.Series]:
         feat_dedup, holdout,
         sort_cols=["l2_rule_max_weight", "l2_rule_partial_max"],
         ascending=[False, False],
+    )
+
+    # --- L3-text: per-review deberta_spam_prob, aggregated to reviewer via max ---
+    text_df = pd.read_csv(
+        L5_FEATURE_TABLE,
+        usecols=["user_id", "deberta_spam_prob"],
+    )
+    text_agg = text_df.groupby("user_id", as_index=False)["deberta_spam_prob"].max()
+    rankings["L3-text"] = _rank_filtered(
+        text_agg, holdout,
+        sort_cols=["deberta_spam_prob", "user_id"], ascending=[False, True],
     )
 
     # --- L4-kmeans: join cluster id -> cluster spam_rate_mean ---

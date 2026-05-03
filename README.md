@@ -1,98 +1,144 @@
-# CMPE 255-01: Data Mining Project  
-## Group 7
+# CMPE 255-01: Data Mining Project — Group 7
 
-### Team Members
-- **Dhruv Sachin Jain** (SJSU ID: 019150859)  
-- **Disha Jadav** (SJSU ID: 018484362)  
-- **Himanshu Jain** (SJSU ID: 019098794)  
+## Team Members
+- **Dhruv Sachin Jain** (SJSU ID: 019150859)
+- **Disha Jadav** (SJSU ID: 018484362)
+- **Himanshu Jain** (SJSU ID: 019098794)
 - **Nitish Kumar** (SJSU ID: 019155916)
 
 ## Project Overview
 
-**Fake Review Detection on Yelp Using Multi-Signal Analysis**
+**Fake Review Detection on Yelp Using Multi-Signal Analysis** on the YelpZip dataset (608,598 reviews, 13.2% spam rate).
 
-This project investigates the detection of fake reviews on Yelp using a **multi-signal data mining framework** applied to the **YelpZip dataset (608,598 reviews)**. The goal is to determine whether combining multiple signals—**textual content, reviewer behavior patterns, association rules, clustering structures, and anomaly detection signals**—can outperform traditional single-signal fake review detection approaches.
+A six-layer pipeline that fuses textual content, reviewer behavior, association rules, clustering structure, supervised classification, and synthetic-attack validation into a single detection stack.
 
-The system is designed as a **six-layer pipeline** that includes data preprocessing and OLAP analysis, association rule mining (FP-Growth), transformer-based text classification using **DeBERTa-v3**, reviewer behavior clustering (K-Means and DBSCAN), supervised classification models (Decision Tree, Random Forest, SVM, MLP), and unsupervised anomaly detection methods (Isolation Forest and LOF).
-
-A comprehensive **ablation study** evaluates the contribution of each signal type by progressively combining features from text-only models to a full multi-signal model. Performance is measured using **F1-score, AUC-ROC, and Precision@K**, with additional validation through **synthetic attack injection and cross-domain testing** on the Ott Deceptive Opinion Spam dataset. The project aims to demonstrate that integrating linguistic and behavioral signals leads to **more robust and accurate fake review detection systems**.
-
----
-
-## Layer 2: FP-Growth Association Rule Mining
-
-FP-Growth discovers frequent co-occurring behavioral traits among reviewers and links them to spam rates. It was chosen over Apriori because it avoids expensive candidate generation, making it tractable on 260,277 reviewer profiles.
-
-**Input:** `reviewer_features.csv` (produced by L1)
-
-**Outputs:**
-- `L2_FPGrowth/outputs/encoded_baskets.csv` — reviewer behavioral baskets (discretized)
-- `L2_FPGrowth/outputs/frequent_itemsets.csv` — all frequent itemsets at min_support=0.05
-- `L2_FPGrowth/outputs/association_rules.csv` — full rule set with support, confidence, lift
-- `L2_FPGrowth/outputs/spam_correlated_rules.csv` — rules filtered to antecedent_spam_rate > 20%
-
-**Key Finding:** The strongest spam-correlated rule is `{tenure=new, review_count=Low}` → `{burst=Normal, seller_conc=High}` with 100% confidence (lift 1.24); reviewers matching these antecedents have a 29.1% spam rate — 2.2× the dataset average of 13.2%.
-
-**How to run:**
-```bash
-pip install mlxtend
-python L2_FPGrowth/01_basket_encoding.py
-python L2_FPGrowth/02_fpgrowth_mining.py
-python L2_FPGrowth/03_rule_analysis.py
-```
-Or open `03_fpgrowth_association_rules.ipynb`
+| Layer | Component | Methods | Owner |
+|-------|-----------|---------|-------|
+| L1 | ETL / OLAP | PySpark ETL, OLAP cubes | Himanshu |
+| L2 | Association Rules | FP-Growth on behavior baskets | Dhruv |
+| L3 | Text Mining / LLM | DeBERTa-v1 fine-tuning | Nitish |
+| L4 | Clustering | K-Means + DBSCAN | Dhruv |
+| L5 | Classification / Anomaly | DT / RF / MLP / IsolationForest / LOF | Disha |
+| L6 | Validation | Jaccard stability + synthetic attacks + ablation | Himanshu |
 
 ---
 
-## Layer 4: K-Means + DBSCAN Reviewer Clustering
+## Headline Results
 
-Reviewers are clustered by behavioral features (without labels) to find groups with elevated spam rates and extreme outlier accounts. K-Means provides interpretable broad groupings; DBSCAN surfaces coordinated spammer rings as density outliers.
+**L3 standalone (DeBERTa-v1 on test split):**
+- AUC-ROC **0.93**, Avg Precision **0.79**, F1-macro **0.84** (default threshold 0.5).
 
-**Input:** `reviewer_features.csv` (produced by L1)
+**L5 supervised (review-level holdout, 106,226 rows):**
 
-**Outputs:**
-- `L4_Clustering/outputs/reviewer_clusters.csv` — K-Means cluster assignment per reviewer
-- `L4_Clustering/outputs/dbscan_results.csv` — DBSCAN cluster + noise assignment per reviewer
-- `L4_Clustering/outputs/cluster_spam_summary.csv` — spam rate and profile per cluster (both methods)
+| Model | AUC-ROC | F1@optimal | Avg Precision |
+|-------|--------:|-----------:|--------------:|
+| MLP | **0.944** | **0.741** | **0.807** |
+| Random Forest | 0.941 | 0.722 | 0.781 |
+| Decision Tree | 0.936 | 0.734 | 0.781 |
 
-**Key Finding:** K-Means Cluster 3 (40,914 reviewers): 36.5% spam rate, profile: new accounts + uniform ratings — 2.8× the dataset average. DBSCAN Cluster 13 (19,051 reviewers): 47.7% spam rate (3.6× average); micro-cluster 48 (90 reviewers) reaches 52.8% spam rate (4.0× average), indicating tightly coordinated spammer rings.
+**L5 anomaly:** Isolation Forest 0.760 AUC, LOF 0.661 AUC.
 
-**How to run:**
-```bash
-python L4_Clustering/01_preprocessing.py
-python L4_Clustering/02_kmeans_clustering.py
-python L4_Clustering/03_dbscan_clustering.py
-python L4_Clustering/04_cluster_analysis.py
-```
-Or open `04_clustering.ipynb`
+**Ablation across layer subsets** (`L6_Validation/outputs/ablation_table.csv`):
+
+| Configuration | AUC-ROC | F1@opt | AP |
+|---|--:|--:|--:|
+| L2-only | 0.716 | 0.385 | 0.230 |
+| L4-only | 0.773 | 0.417 | 0.282 |
+| L5-supervised (no L3) | 0.819 | 0.437 | 0.368 |
+| L5-anomaly (no L3) | 0.572 | 0.254 | 0.176 |
+| L2+L4 | 0.774 | 0.415 | 0.283 |
+| L2+L4+L5 (full behavioral, no L3) | 0.815 | 0.438 | 0.365 |
+| **Full + L3** | **0.936** | **0.741** | **0.798** |
+
+L3 lifts the full stack from 0.815 → 0.936 AUC.
+
+**L6 synthetic-attack detection (per-tier):**
+
+| Layer | Easy | Medium | Hard |
+|---|--:|--:|--:|
+| L2 | 1.00 | 0.33 | 0.00 |
+| L4-kmeans | 1.00 | 0.13 | 0.00 |
+| L4-dbscan | 1.00 | 0.07 | 0.17 |
+| **L5-supervised** | **1.00** | **1.00** | **0.33** |
+| L5-anomaly | 0.93 | 0.80 | 0.05 |
+
+Hard tier: 40 veteran-camouflaged synthetic profiles (expanded from 10 in earlier check-in).
 
 ---
 
-## Layer 5: Classification + Anomaly Detection (Disha)
+## How to Run
 
-Layer 5 fuses behavioral features from L1 with pattern signals from L2 and cluster/noise signals from L4, then trains final spam-detection models.
+### Setup
 
-**Primary input sources:**
-- `reviewer_features.csv` or `L1_ETL_OLAP/output_csv/reviewer_profiles.csv`
-- `L2_FPGrowth/outputs/spam_correlated_rules.csv`
-- `L4_Clustering/outputs/reviewer_clusters.csv`
-- `L4_Clustering/outputs/dbscan_results.csv`
-
-**Outputs:**
-- `L5_Classification/outputs/l5_feature_table.csv` — fused L1+L2+L4 training table
-- `L5_Classification/outputs/supervised_model_metrics.csv` — Decision Tree / Random Forest / SVM metrics
-- `L5_Classification/outputs/anomaly_model_metrics.csv` — Isolation Forest / LOF metrics
-- `L5_Classification/outputs/supervised_best_model.joblib` — best supervised model artifact
-- `L5_Classification/plots/*.png` — ROC, PR, feature-importance, anomaly ROC visualizations
-
-**How to run:**
 ```bash
-python L5_Classification/main.py
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Or stepwise:
+### Per-layer execution
+
 ```bash
-python L5_Classification/01_build_feature_table.py
-python L5_Classification/02_train_models.py
-python L5_Classification/03_anomaly_detection.py
+# L1 ETL (produces reviews_enriched.csv, reviewer_profiles.csv)
+cd L1_ETL_OLAP && python3 main.py && cd ..
+
+# L2 FP-Growth
+python3 L2_FPGrowth/01_basket_encoding.py
+python3 L2_FPGrowth/02_fpgrowth_mining.py
+python3 L2_FPGrowth/03_rule_analysis.py
+
+# L3 DeBERTa fine-tuning (requires GPU; see L3/AWS_TRAINING_GUIDE.md)
+# Locally: predictions and metrics are checked into L3/outputs/.
+# To refresh metrics from saved predictions:
+python3 L3/scripts/refresh_metrics.py
+
+# L4 Clustering
+python3 L4_Clustering/01_preprocessing.py
+python3 L4_Clustering/02_kmeans_clustering.py
+python3 L4_Clustering/03_dbscan_clustering.py
+python3 L4_Clustering/04_cluster_analysis.py
+
+# L5 Classification + analyses
+cd L5_Classification
+python3 01_build_feature_table.py    # fuses L1 + L2 + L3 + L4 features
+python3 02_train_models.py           # DT / RF / MLP supervised
+python3 03_anomaly_detection.py      # Isolation Forest / LOF
+python3 06_ensemble.py               # logistic stacker over all signals
+python3 07_error_analysis.py         # FP/FN bucket analysis
+python3 08_calibration.py            # Platt + isotonic calibration
+cd ..
+
+# L6 Validation
+cd L6_Validation
+python3 01_jaccard_stability.py
+python3 02_synthetic_injection.py    # 70 synthetic profiles across 3 tiers
+python3 03_summary_report.py
+python3 04_ablation_study.py         # ablation across layer subsets
+cd ..
 ```
+
+### Tests
+
+```bash
+python3 -m pytest tests/ -v
+```
+
+---
+
+## Repo Layout
+
+- `L1_ETL_OLAP/` — Spark ETL, OLAP cubes, feature tables
+- `L2_FPGrowth/` — FP-Growth association rule mining
+- `L3/` — DeBERTa fine-tuning + saved predictions/metrics + helper scripts
+- `L4_Clustering/` — K-Means + DBSCAN
+- `L5_Classification/` — supervised + anomaly + ensemble + calibration + error analysis
+- `L6_Validation/` — Jaccard stability + synthetic attacks + ablation
+- `tools/` — figure-audit doc
+- `tests/` — smoke tests for each layer's outputs
+- `docs/` — design specs and implementation plans
+
+---
+
+## Dataset
+
+YelpZip is not redistributed in this repo. Obtain from Mukherjee et al. and place the raw `.txt` files under `L1_ETL_OLAP/data/`.
